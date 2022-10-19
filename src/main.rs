@@ -47,7 +47,7 @@ struct Sphere {
     radious: f32
 }
 
-const EPSILON: f32 = 0.00001;
+const EPSILON: f32 = 1e-6;
 
 fn main() {
 
@@ -57,7 +57,7 @@ fn main() {
     let mut image = RgbImage::new(width, height);
     let camera = Camera::new(Vec3::new(0.0, 0.0, 0.0), 0.0, 0.0);
 
-    let s1 = Sphere{origin: Vec3::new(0.8, -0.3, 2.6), radious: 0.5};
+    let s1 = Sphere{origin: Vec3::new(0.6, -0.1, 2.5), radious: 0.5};
     let s2 = Sphere{origin: Vec3::new(-0.5, 0.0, 3.0), radious: 1.0};
     let scene = vec![s1, s2];
 
@@ -89,6 +89,20 @@ fn distance_estimate(point: &Vec3, scene: &[Sphere]) -> f32 {
     min_distance
 }
 
+fn calculate_normal(point: &Vec3, scene: &[Sphere]) -> Vec3 {
+    let mut min_distance = f32::MAX;
+    let mut normal = Vec3::new(0.0, 0.0, 0.0);
+    for sphere in scene.iter() {
+        let dist = (*point - sphere.origin).len() - sphere.radious;
+
+        if dist < min_distance {
+            min_distance = dist;
+            normal = *point - sphere.origin;
+        }
+    }
+    normal.normalize() //lol
+}
+
 fn march(start: f32, stop: f32, ray: Ray, scene: &[Sphere], sun: Vec3) -> Vec3{
     let mut ray_origin = ray.position;
     let mut direction = ray.direction;
@@ -104,12 +118,14 @@ fn march(start: f32, stop: f32, ray: Ray, scene: &[Sphere], sun: Vec3) -> Vec3{
         distance_travelled += distance;
     }
     if hit_geometry {
-        let color = Vec3::new(1.0, 1.0, 1.0);
+        let color = Vec3::new(0.8, 0.3, 0.2);
         let mut res: f32 = 1.0;
         ray_origin = ray_origin + direction * distance_travelled;
         direction = sun;
+        let normal = calculate_normal(&ray_origin, scene);
+        let shadow = f32::max(0.0, normal.x * direction.x + normal.y * direction.y + normal.z * direction.z);
         distance_travelled = start;
-        let mut previous_distance = EPSILON;
+        let mut previous_distance = 1e-20;
         while distance_travelled < stop {
             let distance = distance_estimate(&(ray_origin + direction * distance_travelled), scene);
             if distance < EPSILON {
@@ -118,11 +134,11 @@ fn march(start: f32, stop: f32, ray: Ray, scene: &[Sphere], sun: Vec3) -> Vec3{
             }
             let y = f32::powi(distance, 2) / (2.0 * previous_distance);
             let d = f32::sqrt(f32::powi(distance, 2) - f32::powi(y, 2));
-            res = f32::min(res, 3.0*d/f32::max(0.0, distance-y));
+            res = f32::min(res, 8.0*d/f32::max(EPSILON, distance_travelled-y));
             previous_distance = distance;
             distance_travelled += distance;
         }
-        color*res
+        color*f32::powf(res, 2.2) * shadow
     }
     else {
         Vec3::new(0.0, 0.0, 0.0)
